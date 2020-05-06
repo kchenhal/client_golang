@@ -39,9 +39,24 @@ type metricVec struct {
 func newMetricVec(desc *Desc, newMetric func(lvs ...string) Metric) *metricVec {
 	return &metricVec{
 		metricMap: &metricMap{
-			metrics:   map[uint64][]metricWithLabelValues{},
-			desc:      desc,
-			newMetric: newMetric,
+			metrics:       map[uint64][]metricWithLabelValues{},
+			desc:          desc,
+			newMetric:     newMetric,
+			shallResetMap: false,
+		},
+		hashAdd:     hashAdd,
+		hashAddByte: hashAddByte,
+	}
+}
+
+// newMetricVecResetMap returns an initialized metricVec.
+func newMetricVecResetMap(desc *Desc, newMetric func(lvs ...string) Metric) *metricVec {
+	return &metricVec{
+		metricMap: &metricMap{
+			metrics:       map[uint64][]metricWithLabelValues{},
+			desc:          desc,
+			newMetric:     newMetric,
+			shallResetMap: true,
 		},
 		hashAdd:     hashAdd,
 		hashAddByte: hashAddByte,
@@ -222,10 +237,11 @@ type curriedLabelValue struct {
 // metricMap is a helper for metricVec and shared between differently curried
 // metricVecs.
 type metricMap struct {
-	mtx       sync.RWMutex // Protects metrics.
-	metrics   map[uint64][]metricWithLabelValues
-	desc      *Desc
-	newMetric func(labelValues ...string) Metric
+	mtx           sync.RWMutex // Protects metrics.
+	metrics       map[uint64][]metricWithLabelValues
+	desc          *Desc
+	newMetric     func(labelValues ...string) Metric
+	shallResetMap bool
 }
 
 // Describe implements Collector. It will send exactly one Desc to the provided
@@ -242,6 +258,12 @@ func (m *metricMap) Collect(ch chan<- Metric) {
 	for _, metrics := range m.metrics {
 		for _, metric := range metrics {
 			ch <- metric.metric
+		}
+	}
+
+	if m.shallResetMap {
+		for h := range m.metrics {
+			delete(m.metrics, h)
 		}
 	}
 }

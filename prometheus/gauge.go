@@ -156,6 +156,26 @@ func NewGaugeVec(opts GaugeOpts, labelNames []string) *GaugeVec {
 	}
 }
 
+// NewGaugeVecReset same as NewGaugeVec, except that it will reset metrics after each scrape
+func NewGaugeVecReset(opts GaugeOpts, labelNames []string) *GaugeVec {
+	desc := NewDesc(
+		BuildFQName(opts.Namespace, opts.Subsystem, opts.Name),
+		opts.Help,
+		labelNames,
+		opts.ConstLabels,
+	)
+	return &GaugeVec{
+		metricVec: newMetricVecResetMap(desc, func(lvs ...string) Metric {
+			if len(lvs) != len(desc.variableLabels) {
+				panic(makeInconsistentCardinalityError(desc.fqName, desc.variableLabels, lvs))
+			}
+			result := &gauge{desc: desc, labelPairs: makeLabelPairs(desc, lvs)}
+			result.init(result) // Init self-collection.
+			return result
+		}),
+	}
+}
+
 // GetMetricWithLabelValues returns the Gauge for the given slice of label
 // values (same order as the VariableLabels in Desc). If that combination of
 // label values is accessed for the first time, a new Gauge is created.
